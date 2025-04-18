@@ -1,0 +1,9 @@
+*.npy filter=lfs diff=lfs merge=lfs -text
+*.txt filter=lfs diff=lfs merge=lfs -text
+*.xz filter=lfs diff=lfs merge=lfs -text
+*.npz filter=lfs diff=lfs merge=lfs -text
+*.md text
+*.py text
+*.yml text
+*.yaml text
+data/ filter=lfs diff=lfs merge=lfs -text
