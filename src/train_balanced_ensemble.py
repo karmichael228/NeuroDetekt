@@ -10,22 +10,47 @@ import argparse
 import time
 import os
 import random
+import sys
+import warnings
 from datetime import datetime
 from pathlib import Path
 
-import torch
-import numpy as np
-import matplotlib
-matplotlib.use('Agg')  # Используем бэкенд без GUI
-import matplotlib.pyplot as plt
-from torch.nn import functional as F
-from torch.optim import Adam, lr_scheduler
-from tqdm import tqdm
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, precision_recall_curve
+# Проверка совместимости NumPy перед импортом torch
+try:
+    import numpy as np
+    numpy_version = np.__version__
+    major_version = int(numpy_version.split('.')[0])
+    if major_version >= 2:
+        print(f"⚠️ Обнаружена версия NumPy {numpy_version}. PyTorch может работать некорректно с NumPy 2.x.")
+        print("   Рекомендуется использовать NumPy 1.x для работы с PyTorch.")
+        print("   Попробуйте выполнить: conda install numpy=1.24.3")
+        sys.exit(1)
+except ImportError:
+    print("⚠️ Не удалось импортировать NumPy. Убедитесь, что пакет установлен.")
+    sys.exit(1)
 
-from data_processing import get_data, load_data_splits, SequencePairDataset, SequenceDataset, collate_fn, test_collate_fn
-from models import create_lstm_model, LSTMModel
-from training_utils import TimeTracker, LossTracker, validate_model
+try:
+    import torch
+    import matplotlib
+    matplotlib.use('Agg')  # Используем бэкенд без GUI
+    import matplotlib.pyplot as plt
+    from torch.nn import functional as F
+    from torch.optim import Adam, lr_scheduler
+    from tqdm import tqdm
+    from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, precision_recall_curve
+except ImportError as e:
+    print(f"⚠️ Ошибка импорта: {e}")
+    print("   Убедитесь, что все необходимые пакеты установлены.")
+    sys.exit(1)
+
+try:
+    from data_processing import get_data, load_data_splits, SequencePairDataset, SequenceDataset, collate_fn, test_collate_fn
+    from models import create_lstm_model, LSTMModel
+    from training_utils import TimeTracker, LossTracker, validate_model
+except ImportError as e:
+    print(f"⚠️ Ошибка импорта локальных модулей: {e}")
+    print("   Убедитесь, что вы находитесь в корневой директории проекта.")
+    sys.exit(1)
 
 # Настройка seed для воспроизводимости
 SEED = 42
@@ -33,6 +58,9 @@ np.random.seed(SEED)
 torch.manual_seed(SEED)
 if torch.cuda.is_available():
     torch.cuda.manual_seed_all(SEED)
+
+# Игнорировать определенные предупреждения
+warnings.filterwarnings("ignore", category=UserWarning, message="Failed to initialize NumPy")
 
 
 def create_parser():
@@ -122,16 +150,30 @@ def create_parser():
 
 def get_device(device_arg):
     """Определяет устройство для вычислений (CUDA или CPU)."""
-    if device_arg == "cuda" and torch.cuda.is_available():
-        device = torch.device("cuda")
-        gpu_name = torch.cuda.get_device_name(0)
-        memory_allocated = torch.cuda.get_device_properties(0).total_memory / 1024**3
-        print(f"💻 Используем GPU: {gpu_name}")
-        print(f"📊 Доступная память GPU: {memory_allocated:.2f} GB")
-    else:
-        device = torch.device("cpu")
-        print("💻 Используем CPU")
-    return device
+    try:
+        if device_arg == "cuda" and torch.cuda.is_available():
+            device = torch.device("cuda")
+            gpu_name = torch.cuda.get_device_name(0)
+            memory_allocated = torch.cuda.get_device_properties(0).total_memory / 1024**3
+            print(f"💻 Используем GPU: {gpu_name}")
+            print(f"📊 Доступная память GPU: {memory_allocated:.2f} GB")
+            
+            # Проверка версии CUDA
+            cuda_version = torch.version.cuda
+            if cuda_version:
+                print(f"🔧 Версия CUDA: {cuda_version}")
+            
+            return device
+        else:
+            if device_arg == "cuda":
+                print("⚠️ CUDA запрошена, но недоступна. Используем CPU вместо GPU.")
+            else:
+                print("💻 Используем CPU")
+            return torch.device("cpu")
+    except Exception as e:
+        print(f"⚠️ Ошибка при инициализации устройства: {e}")
+        print("💻 Используем CPU как резервный вариант")
+        return torch.device("cpu")
 
 
 def create_balanced_dataset(train_data, ratio=1.0, duplicate_factor=1):
@@ -417,6 +459,51 @@ def get_ensemble_scores(models, dataloader, device):
     return avg_scores
 
 
+def create_safe_dataloader(dataset, batch_size, shuffle, collate_fn, num_workers, device, is_test=False):
+    """Создает безопасный загрузчик данных с обработкой ошибок.
+    
+    Args:
+        dataset: Набор данных
+        batch_size: Размер батча
+        shuffle: Флаг перемешивания данных
+        collate_fn: Функция объединения данных
+        num_workers: Количество рабочих процессов
+        device: Устройство для вычислений
+        is_test: Флаг тестового режима
+        
+    Returns:
+        DataLoader: Загрузчик данных
+    """
+    # Проверка доступности мультипроцессинга
+    use_multiprocessing = num_workers > 0
+    
+    try:
+        if use_multiprocessing:
+            # Попытка создать загрузчик с несколькими рабочими
+            return torch.utils.data.DataLoader(
+                dataset,
+                batch_size=batch_size,
+                shuffle=shuffle,
+                collate_fn=collate_fn if not is_test else test_collate_fn,
+                num_workers=num_workers,
+                pin_memory=(str(device) == 'cuda')
+            )
+    except RuntimeError as e:
+        # Если есть ошибка, связанная с мультипроцессингом, отключаем его
+        print(f"⚠️ Ошибка при создании загрузчика данных с {num_workers} рабочими: {e}")
+        print("   Отключаем многопроцессорную загрузку данных.")
+        
+    # Резервный вариант - однопроцессный загрузчик
+    return torch.utils.data.DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=shuffle,
+        collate_fn=collate_fn if not is_test else test_collate_fn,
+        num_workers=0,  # Используем 0 для предотвращения ошибок мультипроцессинга
+        pin_memory=(str(device) == 'cuda')
+    )
+
+
 def main(
     batch_size=96,
     epochs=15,
@@ -442,207 +529,233 @@ def main(
     output_path = Path(output_dir)
     output_path.mkdir(exist_ok=True, parents=True)
     
-    # Загружаем данные
-    train_data, _, test_val, atk = load_data_splits(
-        "plaid", train_pct=1.0, ratio=1.0
-    )
-    
-    # Создаем балансированные данные для обучения
-    balanced_train_data = create_balanced_dataset(train_data, ratio=1.0, duplicate_factor=2)
-    
-    # Создаем тестовые данные и метки
-    test_data = test_val + atk
-    test_labels = torch.zeros(len(test_val) + len(atk))
-    test_labels[len(test_val):] = 1
-    
-    # Создаем тестовый загрузчик
-    test_dataset = SequenceDataset(test_data)
-    test_loader = torch.utils.data.DataLoader(
-        test_dataset,
-        batch_size=batch_size,
-        shuffle=False,
-        collate_fn=test_collate_fn,
-        num_workers=num_workers,
-        pin_memory=(str(device) == 'cuda')
-    )
-    
-    # Параметры модели
-    model_args = {
-        'vocab_size': 229,  # Для PLAID датасета
-        'cells': cells,
-        'depth': depth,
-        'dropout': dropout,
-    }
-    
-    # Обучаем ансамбль моделей
-    ensemble_models = []
-    for i in range(ensemble_size):
-        print(f"\n{'='*50}")
-        print(f"🔄 Обучение модели {i+1}/{ensemble_size}")
-        print(f"{'='*50}")
+    try:
+        # Загружаем данные
+        print(f"📂 Загрузка данных...")
+        train_data, _, test_val, atk = load_data_splits(
+            "plaid", train_pct=1.0, ratio=1.0
+        )
         
-        # Создаем датасет и загрузчик для текущей модели
-        # Меняем немного данные для каждой модели для разнообразия
-        if i > 0:
-            # Перемешиваем данные для каждой модели
-            random.shuffle(balanced_train_data)
+        # Создаем балансированные данные для обучения
+        balanced_train_data = create_balanced_dataset(train_data, ratio=1.0, duplicate_factor=2)
         
-        train_dataset = SequencePairDataset(balanced_train_data)
-        train_loader = torch.utils.data.DataLoader(
-            train_dataset,
+        # Создаем тестовые данные и метки
+        test_data = test_val + atk
+        test_labels = torch.zeros(len(test_val) + len(atk))
+        test_labels[len(test_val):] = 1
+        
+        # Создаем тестовый загрузчик
+        test_dataset = SequenceDataset(test_data)
+        test_loader = create_safe_dataloader(
+            test_dataset,
             batch_size=batch_size,
-            shuffle=True,
-            collate_fn=collate_fn,
+            shuffle=False,
+            collate_fn=test_collate_fn,
             num_workers=num_workers,
-            pin_memory=(str(device) == 'cuda')
-        )
-        
-        # Создаем модель
-        model, optimizer, criterion = create_lstm_model(
-            vocab_size=model_args['vocab_size'],
-            cells=model_args['cells'],
-            depth=model_args['depth'],
-            dropout=model_args['dropout'],
             device=device,
-            learning_rate=learning_rate
+            is_test=True
         )
         
-        # Создаем планировщик скорости обучения
-        scheduler = lr_scheduler.StepLR(
-            optimizer, step_size=3, gamma=0.5
-        )
+        # Параметры модели
+        model_args = {
+            'vocab_size': 229,  # Для PLAID датасета
+            'cells': cells,
+            'depth': depth,
+            'dropout': dropout,
+        }
         
-        # Для ранней остановки
-        best_train_loss = float("inf")
-        best_model_state = None
-        patience_counter = 0
-        
-        # Для отслеживания процесса обучения
-        train_losses = []
-        train_accs = []
-        
-        # Обучаем модель
-        for epoch in range(1, epochs + 1):
-            # Обучение
-            train_loss, train_acc, epoch_time = train_epoch(
-                model, train_loader, optimizer, criterion, device, epoch, scheduler
+        # Обучаем ансамбль моделей
+        ensemble_models = []
+        for i in range(ensemble_size):
+            print(f"\n{'='*50}")
+            print(f"🔄 Обучение модели {i+1}/{ensemble_size}")
+            print(f"{'='*50}")
+            
+            # Создаем датасет и загрузчик для текущей модели
+            # Меняем немного данные для каждой модели для разнообразия
+            if i > 0:
+                # Перемешиваем данные для каждой модели
+                random.shuffle(balanced_train_data)
+            
+            train_dataset = SequencePairDataset(balanced_train_data)
+            train_loader = create_safe_dataloader(
+                train_dataset,
+                batch_size=batch_size,
+                shuffle=True,
+                collate_fn=collate_fn,
+                num_workers=num_workers,
+                device=device
             )
             
-            # Сохраняем результаты
-            train_losses.append(train_loss)
-            train_accs.append(train_acc)
+            # Создаем модель
+            model, optimizer, criterion = create_lstm_model(
+                vocab_size=model_args['vocab_size'],
+                cells=model_args['cells'],
+                depth=model_args['depth'],
+                dropout=model_args['dropout'],
+                device=device,
+                learning_rate=learning_rate
+            )
             
-            # Ранняя остановка на основе тренировочной потери
-            if early_stopping:
-                if train_loss < best_train_loss:
-                    best_train_loss = train_loss
-                    best_model_state = model.state_dict().copy()
-                    patience_counter = 0
-                else:
-                    patience_counter += 1
-                    if patience_counter >= patience:
-                        print(f"⚠️ Ранняя остановка на эпохе {epoch}")
-                        break
+            # Создаем планировщик скорости обучения
+            scheduler = lr_scheduler.StepLR(
+                optimizer, step_size=3, gamma=0.5
+            )
+            
+            # Для ранней остановки
+            best_train_loss = float("inf")
+            best_model_state = None
+            patience_counter = 0
+            
+            # Для отслеживания процесса обучения
+            train_losses = []
+            train_accs = []
+            
+            # Обучаем модель
+            for epoch in range(1, epochs + 1):
+                # Обучение
+                try:
+                    train_loss, train_acc, epoch_time = train_epoch(
+                        model, train_loader, optimizer, criterion, device, epoch, scheduler
+                    )
+                    
+                    # Сохраняем результаты
+                    train_losses.append(train_loss)
+                    train_accs.append(train_acc)
+                    
+                    # Ранняя остановка на основе тренировочной потери
+                    if early_stopping:
+                        if train_loss < best_train_loss:
+                            best_train_loss = train_loss
+                            best_model_state = model.state_dict().copy()
+                            patience_counter = 0
+                        else:
+                            patience_counter += 1
+                            if patience_counter >= patience:
+                                print(f"⚠️ Ранняя остановка на эпохе {epoch}")
+                                break
+                except Exception as e:
+                    print(f"⚠️ Ошибка при обучении эпохи {epoch}: {e}")
+                    print("   Пропускаем эту эпоху и продолжаем.")
+                    continue
+            
+            # Используем лучшую модель, если была ранняя остановка
+            if early_stopping and best_model_state is not None:
+                model.load_state_dict(best_model_state)
+            
+            # Создаем графики
+            try:
+                plt.figure(figsize=(12, 5))
+                epochs_range = range(1, len(train_losses) + 1)
+                
+                plt.subplot(1, 2, 1)
+                plt.plot(epochs_range, train_losses, 'b-', label='Потеря обучения')
+                plt.title(f'Функция потерь модели {i+1}')
+                plt.xlabel('Эпохи')
+                plt.ylabel('Потеря')
+                plt.legend()
+                plt.grid(True, linestyle='--', alpha=0.7)
+                
+                plt.subplot(1, 2, 2)
+                plt.plot(epochs_range, train_accs, 'b-', label='Точность обучения')
+                plt.title(f'Точность модели {i+1}')
+                plt.xlabel('Эпохи')
+                plt.ylabel('Точность')
+                plt.legend()
+                plt.grid(True, linestyle='--', alpha=0.7)
+                
+                plt.tight_layout()
+                plt.savefig(output_path / f"model_{i+1}_training.png")
+                plt.close()
+            except Exception as e:
+                print(f"⚠️ Ошибка при создании графиков: {e}")
+            
+            # Сохраняем модель
+            model_path = output_path / f"model_{i+1}.pt"
+            torch.save(model, model_path)
+            print(f"💾 Модель {i+1} сохранена: {model_path}")
+            
+            # Добавляем модель в ансамбль
+            ensemble_models.append(model)
+            
+            # Очистка памяти CUDA
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
         
-        # Используем лучшую модель, если была ранняя остановка
-        if early_stopping and best_model_state is not None:
-            model.load_state_dict(best_model_state)
+        # Оцениваем ансамбль на тестовом наборе
+        print("\n" + "="*50)
+        print(f"📊 Оценка ансамбля на тестовом наборе")
+        print("="*50)
         
-        # Создаем графики
-        plt.figure(figsize=(12, 5))
-        epochs_range = range(1, len(train_losses) + 1)
+        # Получаем усредненные оценки от ансамбля
+        try:
+            ensemble_scores = get_ensemble_scores(ensemble_models, test_loader, device)
+            
+            # Находим оптимальный порог
+            threshold, metrics = find_optimal_threshold(ensemble_scores, test_labels, balance_factor)
+            
+            # Выводим метрики
+            print(f"\n📊 Результаты ансамбля с оптимальным порогом {threshold:.4f}:")
+            print(f"   ✅ Точность: {metrics['accuracy']:.4f}")
+            print(f"   📏 Precision: {metrics['precision']:.4f}")
+            print(f"   📏 Recall: {metrics['recall']:.4f}")
+            print(f"   📏 F1-мера: {metrics['f1_score']:.4f}")
+            print(f"   📏 F-бета (с balance_factor={balance_factor}): {metrics['f_beta']:.4f}")
+            
+            # Сохраняем результаты тестирования
+            with open(output_path / "ensemble_results.txt", "w") as f:
+                f.write(f"Оптимальный порог: {threshold:.4f}\n")
+                f.write(f"Точность: {metrics['accuracy']:.4f}\n")
+                f.write(f"Precision: {metrics['precision']:.4f}\n")
+                f.write(f"Recall: {metrics['recall']:.4f}\n")
+                f.write(f"F1-мера: {metrics['f1_score']:.4f}\n")
+                f.write(f"F-бета (с balance_factor={balance_factor}): {metrics['f_beta']:.4f}\n")
+            
+            # Строим графики распределения оценок
+            plt.figure(figsize=(10, 6))
+            
+            # Разделяем оценки на нормальные и аномальные
+            normal_scores = ensemble_scores[test_labels == 0]
+            attack_scores = ensemble_scores[test_labels == 1]
+            
+            # Строим гистограммы
+            plt.hist(normal_scores, bins=50, alpha=0.5, label='Нормальные', color='green')
+            plt.hist(attack_scores, bins=50, alpha=0.5, label='Атаки', color='red')
+            
+            # Добавляем линию порога
+            plt.axvline(x=threshold, color='black', linestyle='--', 
+                       label=f'Порог = {threshold:.3f}')
+            
+            plt.xlabel('Оценка аномальности')
+            plt.ylabel('Количество последовательностей')
+            plt.title('Распределение оценок аномальности ансамбля')
+            plt.legend()
+            plt.grid(True, linestyle='--', alpha=0.7)
+            
+            plt.tight_layout()
+            plt.savefig(output_path / 'ensemble_score_distribution.png')
+            plt.close()
+        except Exception as e:
+            print(f"⚠️ Ошибка при оценке ансамбля: {e}")
         
-        plt.subplot(1, 2, 1)
-        plt.plot(epochs_range, train_losses, 'b-', label='Потеря обучения')
-        plt.title(f'Функция потерь модели {i+1}')
-        plt.xlabel('Эпохи')
-        plt.ylabel('Потеря')
-        plt.legend()
-        plt.grid(True, linestyle='--', alpha=0.7)
+        # Вычисляем общее время обучения
+        total_time = time.time() - start_time
+        hours, remainder = divmod(total_time, 3600)
+        minutes, seconds = divmod(remainder, 60)
         
-        plt.subplot(1, 2, 2)
-        plt.plot(epochs_range, train_accs, 'b-', label='Точность обучения')
-        plt.title(f'Точность модели {i+1}')
-        plt.xlabel('Эпохи')
-        plt.ylabel('Точность')
-        plt.legend()
-        plt.grid(True, linestyle='--', alpha=0.7)
+        print(f"\n⏱️ Общее время обучения: {int(hours)}ч {int(minutes)}м {int(seconds)}с")
+        print(f"💾 Все результаты сохранены в директории: {output_path}")
         
-        plt.tight_layout()
-        plt.savefig(output_path / f"model_{i+1}_training.png")
-        plt.close()
-        
-        # Сохраняем модель
-        model_path = output_path / f"model_{i+1}.pt"
-        torch.save(model, model_path)
-        print(f"💾 Модель {i+1} сохранена: {model_path}")
-        
-        # Добавляем модель в ансамбль
-        ensemble_models.append(model)
+    except Exception as e:
+        print(f"❌ Критическая ошибка: {e}")
+        import traceback
+        traceback.print_exc()
+        return 1
     
-    # Оцениваем ансамбль на тестовом наборе
-    print("\n" + "="*50)
-    print(f"📊 Оценка ансамбля на тестовом наборе")
-    print("="*50)
-    
-    # Получаем усредненные оценки от ансамбля
-    ensemble_scores = get_ensemble_scores(ensemble_models, test_loader, device)
-    
-    # Находим оптимальный порог
-    threshold, metrics = find_optimal_threshold(ensemble_scores, test_labels, balance_factor)
-    
-    # Выводим метрики
-    print(f"\n📊 Результаты ансамбля с оптимальным порогом {threshold:.4f}:")
-    print(f"   ✅ Точность: {metrics['accuracy']:.4f}")
-    print(f"   📏 Precision: {metrics['precision']:.4f}")
-    print(f"   📏 Recall: {metrics['recall']:.4f}")
-    print(f"   📏 F1-мера: {metrics['f1_score']:.4f}")
-    print(f"   📏 F-бета (с balance_factor={balance_factor}): {metrics['f_beta']:.4f}")
-    
-    # Сохраняем результаты тестирования
-    with open(output_path / "ensemble_results.txt", "w") as f:
-        f.write(f"Оптимальный порог: {threshold:.4f}\n")
-        f.write(f"Точность: {metrics['accuracy']:.4f}\n")
-        f.write(f"Precision: {metrics['precision']:.4f}\n")
-        f.write(f"Recall: {metrics['recall']:.4f}\n")
-        f.write(f"F1-мера: {metrics['f1_score']:.4f}\n")
-        f.write(f"F-бета (с balance_factor={balance_factor}): {metrics['f_beta']:.4f}\n")
-    
-    # Строим графики распределения оценок
-    plt.figure(figsize=(10, 6))
-    
-    # Разделяем оценки на нормальные и аномальные
-    normal_scores = ensemble_scores[test_labels == 0]
-    attack_scores = ensemble_scores[test_labels == 1]
-    
-    # Строим гистограммы
-    plt.hist(normal_scores, bins=50, alpha=0.5, label='Нормальные', color='green')
-    plt.hist(attack_scores, bins=50, alpha=0.5, label='Атаки', color='red')
-    
-    # Добавляем линию порога
-    plt.axvline(x=threshold, color='black', linestyle='--', 
-               label=f'Порог = {threshold:.3f}')
-    
-    plt.xlabel('Оценка аномальности')
-    plt.ylabel('Количество последовательностей')
-    plt.title('Распределение оценок аномальности ансамбля')
-    plt.legend()
-    plt.grid(True, linestyle='--', alpha=0.7)
-    
-    plt.tight_layout()
-    plt.savefig(output_path / 'ensemble_score_distribution.png')
-    plt.close()
-    
-    # Вычисляем общее время обучения
-    total_time = time.time() - start_time
-    hours, remainder = divmod(total_time, 3600)
-    minutes, seconds = divmod(remainder, 60)
-    
-    print(f"\n⏱️ Общее время обучения: {int(hours)}ч {int(minutes)}м {int(seconds)}с")
-    print(f"💾 Все результаты сохранены в директории: {output_path}")
+    return 0
 
 
 if __name__ == "__main__":
     parser = create_parser()
     args = parser.parse_args()
-    main(**vars(args)) 
+    sys.exit(main(**vars(args))) 

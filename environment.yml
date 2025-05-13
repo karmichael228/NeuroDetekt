@@ -15,7 +15,7 @@ dependencies:
   - ipython
   - jupyter
   - matplotlib
-  - numpy
+  - numpy=1.24.3
   - pandas
   - scikit-learn
   - black

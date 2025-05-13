@@ -22,6 +22,41 @@ conda env create -f environment.yml
 conda activate neurodetekt
 ```
 
+Или используйте скрипт автоматического обновления (для Linux/macOS):
+
+```bash
+chmod +x update_environment.sh
+./update_environment.sh
+```
+
+### Проверка окружения
+
+Перед запуском обучения рекомендуется проверить настройку окружения:
+
+```bash
+python src/check_environment.py
+```
+
+Этот скрипт проверит:
+- Установленные библиотеки и их версии
+- Совместимость NumPy и PyTorch
+- Доступность CUDA для ускорения обучения
+- Наличие необходимых файлов и данных
+
+### Устранение типичных проблем
+
+1. **Проблема с версией NumPy**:
+   Если вы видите ошибку о несовместимости NumPy 2.x и PyTorch, установите совместимую версию:
+   ```bash
+   conda install numpy=1.24.3
+   ```
+
+2. **Ошибки CUDA**:
+   Если возникают проблемы с CUDA, можно запустить обучение на CPU:
+   ```bash
+   python src/train_balanced_ensemble.py --device cpu
+   ```
+
 ## Наборы данных
 
 Проект использует набор данных PLAID (Plaid Lab Artificial Intrusion Dataset), включенный в репозиторий. Для использования просто распакуйте `data/PLAID.tar.xz`.

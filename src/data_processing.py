@@ -13,12 +13,31 @@
 from itertools import chain
 from pathlib import Path
 from typing import Hashable, List, Tuple
+import sys
+import os
+import pickle
 
-import numpy as np
+# Правильный импорт numpy с проверкой
+try:
+    import numpy as np
+except ImportError:
+    print("Ошибка импорта NumPy, проверьте установку: conda install numpy=1.24.3")
+    sys.exit(1)
+
 import torch
 from torch.utils.data import DataLoader, Dataset, TensorDataset, random_split
 from torch.nn.utils.rnn import pad_sequence
 
+
+def save_pickle(obj, file_path):
+    """Сохраняет объект в формате pickle."""
+    with open(file_path, 'wb') as f:
+        pickle.dump(obj, f)
+
+def load_pickle(file_path):
+    """Загружает объект из файла pickle."""
+    with open(file_path, 'rb') as f:
+        return pickle.load(f)
 
 def load_files(data_set, nested=False):
     """Loads requested system call data set from disk
@@ -87,8 +106,19 @@ class Encoder:
     def __init__(self, file_path: str) -> None:
         self.file_path = Path(file_path)
         if self.file_path.exists():
-            self.syscall_map = np.load(self.file_path, allow_pickle=True).item()
-            print(f"Загружен энкодер с {len(self.syscall_map)} системных вызовов")
+            try:
+                self.syscall_map = np.load(self.file_path, allow_pickle=True).item()
+                print(f"Загружен энкодер с {len(self.syscall_map)} системных вызовов")
+            except Exception as e:
+                print(f"Ошибка загрузки энкодера: {e}")
+                # Пробуем альтернативный метод с pickle
+                pickle_path = self.file_path.with_suffix('.pkl')
+                if pickle_path.exists():
+                    self.syscall_map = load_pickle(pickle_path)
+                    print(f"Загружен энкодер из pickle с {len(self.syscall_map)} системных вызовов")
+                else:
+                    print("Создаем новый энкодер")
+                    self.syscall_map = {}
 
     def encode(self, syscall: Hashable) -> int:
         """Encodes an individual item
@@ -106,7 +136,13 @@ class Encoder:
             return self.syscall_map[syscall]
         syscall_enc = len(self.syscall_map) + 1
         self.syscall_map[syscall] = syscall_enc
-        np.save(self.file_path, self.syscall_map)
+        
+        try:
+            np.save(self.file_path, self.syscall_map)
+        except Exception as e:
+            print(f"Ошибка сохранения numpy: {e}, используем pickle")
+            pickle_path = self.file_path.with_suffix('.pkl')
+            save_pickle(self.syscall_map, pickle_path)
 
         return syscall_enc
 
@@ -205,74 +241,87 @@ def load_data_splits(data_set, train_pct=1.0, ratio=1.0):
 
     if ratio != 1:
         out_path = Path(f"out/{data_set}_split80_20_{ratio}.npz")
+        pickle_path = Path(f"out/{data_set}_split80_20_{ratio}.pkl")
     else:
         out_path = Path(f"out/{data_set}_split80_20.npz")
+        pickle_path = Path(f"out/{data_set}_split80_20.pkl")
 
-    print(f"Проверка наличия файла {out_path}")
-    if out_path.exists():
-        print(f"Загрузка предварительно сохраненных данных из {out_path}")
-        data = np.load(out_path, allow_pickle=True)
-        train, val, test_val, atk = data["arr_0"]
-        print(f"Загружено: train={len(train)}, test_val={len(test_val)}, atk={len(atk)}")
-    else:
-        print(f"Создание новых данных, так как {out_path} не существует")
-        out_path.parent.mkdir(exist_ok=True, parents=True)
-        encoder = Encoder(f"data/{data_set}_encoder.npy")
-
-        atk_files, normal_files = load_files(data_set)
-
-        # Определяем размер тренировочного набора
-        train_size = int(len(normal_files) * train_split)
-        
-        # Перемешиваем нормальные данные
-        normal_idxs = np.arange(len(normal_files))
-        np.random.shuffle(normal_idxs)
-        
-        # Разделяем на обучающую и тестовую выборки
-        train_files = []
-        for idx in normal_idxs[:train_size]:
-            train_files.append(normal_files[idx])
-            
-        test_val_files = []
-        for idx in normal_idxs[train_size:]:
-            test_val_files.append(normal_files[idx])
-
-        print(f"Разделение: train={len(train_files)}, test_val={len(test_val_files)}, atk={len(atk_files)}")
-
-        vec_encode = np.vectorize(encoder.encode)
-        train = [vec_encode(row).astype(np.float32) for row in train_files]
-        val = []  # Пустой валидационный набор для совместимости
-        atk = [vec_encode(row).astype(np.float32) for row in atk_files]
-        test_val = [vec_encode(row).astype(np.float32) for row in test_val_files]
-
-        # Сохраняем данные в правильном формате
-        print(f"Сохранение данных в {out_path}")
-        data_to_save = np.array([train, val, test_val, atk], dtype=object)
-        np.savez_compressed(out_path, arr_0=data_to_save)
-
-    if train_pct < 1:
-        train_idxs = np.arange(int(len(train) * train_pct))
-        np.random.shuffle(train_idxs)
-        tmp = []
-        for idx in train_idxs:
-            tmp.append(train[idx])
-        train = tmp
-
-    # Проверка на пустые данные
-    if len(train) == 0:
-        # Создаем фиктивные данные для обучения, если не найдены реальные
-        print("Внимание: создаются фиктивные данные для обучения, так как обучающий набор пуст!")
-        train = [np.array([1, 2, 3, 4, 5], dtype=np.float32) for _ in range(10)]
+    print(f"Проверка наличия файла {out_path} или {pickle_path}")
     
-    if len(test_val) == 0:
-        # Создаем фиктивные данные для тестирования
-        print("Внимание: создаются фиктивные данные для тестирования!")
-        test_val = [np.array([1, 2, 3, 4, 5], dtype=np.float32) for _ in range(5)]
+    # Сначала пробуем загрузить pickle, если он существует
+    if pickle_path.exists():
+        print(f"Загрузка данных из pickle: {pickle_path}")
+        try:
+            data = load_pickle(pickle_path)
+            train, val, test_val, atk = data
+            print(f"Загружено из pickle: train={len(train)}, test_val={len(test_val)}, atk={len(atk)}")
+            return train, val, test_val, atk
+        except Exception as e:
+            print(f"Ошибка загрузки pickle: {e}")
+    
+    # Затем пробуем загрузить numpy
+    if out_path.exists():
+        print(f"Загрузка данных из numpy: {out_path}")
+        try:
+            data = np.load(out_path, allow_pickle=True)
+            train, val, test_val, atk = data["arr_0"]
+            print(f"Загружено из numpy: train={len(train)}, test_val={len(test_val)}, atk={len(atk)}")
+            
+            # Сохраняем в pickle для резервного копирования
+            try:
+                save_pickle([train, val, test_val, atk], pickle_path)
+                print(f"Данные также сохранены в pickle: {pickle_path}")
+            except Exception as e:
+                print(f"Ошибка сохранения в pickle: {e}")
+                
+            return train, val, test_val, atk
+        except Exception as e:
+            print(f"Ошибка загрузки numpy: {e}")
+    
+    # Если не удалось загрузить данные, создаем их заново
+    print(f"Создание новых данных...")
+    out_path.parent.mkdir(exist_ok=True, parents=True)
+    encoder = Encoder(f"data/{data_set}_encoder.npy")
+
+    atk_files, normal_files = load_files(data_set)
+
+    # Определяем размер тренировочного набора
+    train_size = int(len(normal_files) * train_split)
+    
+    # Перемешиваем нормальные данные
+    normal_idxs = np.arange(len(normal_files))
+    np.random.shuffle(normal_idxs)
+    
+    # Разделяем на обучающую и тестовую выборки
+    train_files = []
+    for idx in normal_idxs[:train_size]:
+        train_files.append(normal_files[idx])
         
-    if len(atk) == 0:
-        # Создаем фиктивные данные для атак
-        print("Внимание: создаются фиктивные данные для атак!")
-        atk = [np.array([5, 4, 3, 2, 1], dtype=np.float32) for _ in range(5)]
+    test_val_files = []
+    for idx in normal_idxs[train_size:]:
+        test_val_files.append(normal_files[idx])
+
+    print(f"Разделение: train={len(train_files)}, test_val={len(test_val_files)}, atk={len(atk_files)}")
+
+    vec_encode = np.vectorize(encoder.encode)
+    train = [vec_encode(row).astype(np.float32) for row in train_files]
+    val = []  # Пустой валидационный набор для совместимости
+    atk = [vec_encode(row).astype(np.float32) for row in atk_files]
+    test_val = [vec_encode(row).astype(np.float32) for row in test_val_files]
+
+    # Сохраняем данные в обоих форматах
+    try:
+        print(f"Сохранение данных в numpy: {out_path}")
+        data_to_save = np.array([train, val, test_val, atk], dtype=object)
+        np.savez(out_path, data_to_save)
+    except Exception as e:
+        print(f"Ошибка сохранения в numpy: {e}")
+    
+    try:
+        print(f"Сохранение данных в pickle: {pickle_path}")
+        save_pickle([train, val, test_val, atk], pickle_path)
+    except Exception as e:
+        print(f"Ошибка сохранения в pickle: {e}")
 
     return train, val, test_val, atk
 

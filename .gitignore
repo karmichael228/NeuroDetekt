@@ -1,5 +1,5 @@
 # Директории данных и результатов
-/data/
+/data/PLAID
 /trials/
 /out/
 
@@ -8,6 +8,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.so
+*.npy
 .Python
 build/
 develop-eggs/
