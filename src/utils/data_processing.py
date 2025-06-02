@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*
+# -*- coding: utf-8 -*-
 
 """Computes and loads data splits for PLAID
 
@@ -27,7 +27,6 @@ except ImportError:
 import torch
 from torch.utils.data import DataLoader, Dataset, TensorDataset, random_split
 from torch.nn.utils.rnn import pad_sequence
-
 
 def save_pickle(obj, file_path):
     """Сохраняет объект в формате pickle."""
@@ -228,23 +227,26 @@ def load_data_splits(data_set, train_pct=1.0, ratio=1.0):
         train : List
             Data set for training seq-seq system call language model. Consists of only baseline sequences.
         val : List
-            Empty list to maintain compatibility with existing code.
+            Validation set for monitoring overfitting. Consists of only baseline sequences.
         test_val : List
             Baseline system call sequences for use in final model evaluation.
         atk : List
             Attack system call sequences for use in final model evaluation.
 
     """
-    train_split = 0.8  # 80% нормальных данных для обучения, 20% - для тестирования
+    train_split = 0.6  # 60% нормальных данных для обучения
+    val_split = 0.2    # 20% нормальных данных для валидации  
+    test_split = 0.2   # 20% нормальных данных для тестирования
+    
     if data_set != "plaid":
         raise ValueError("data_set must be plaid")
 
     if ratio != 1:
-        out_path = Path(f"out/{data_set}_split80_20_{ratio}.npz")
-        pickle_path = Path(f"out/{data_set}_split80_20_{ratio}.pkl")
+        out_path = Path(f"out/{data_set}_split60_20_20_{ratio}.npz")
+        pickle_path = Path(f"out/{data_set}_split60_20_20_{ratio}.pkl")
     else:
-        out_path = Path(f"out/{data_set}_split80_20.npz")
-        pickle_path = Path(f"out/{data_set}_split80_20.pkl")
+        out_path = Path(f"out/{data_set}_split60_20_20.npz")
+        pickle_path = Path(f"out/{data_set}_split60_20_20.pkl")
 
     print(f"Проверка наличия файла {out_path} или {pickle_path}")
     
@@ -254,7 +256,7 @@ def load_data_splits(data_set, train_pct=1.0, ratio=1.0):
         try:
             data = load_pickle(pickle_path)
             train, val, test_val, atk = data
-            print(f"Загружено из pickle: train={len(train)}, test_val={len(test_val)}, atk={len(atk)}")
+            print(f"Загружено из pickle: train={len(train)}, val={len(val)}, test_val={len(test_val)}, atk={len(atk)}")
             return train, val, test_val, atk
         except Exception as e:
             print(f"Ошибка загрузки pickle: {e}")
@@ -265,7 +267,7 @@ def load_data_splits(data_set, train_pct=1.0, ratio=1.0):
         try:
             data = np.load(out_path, allow_pickle=True)
             train, val, test_val, atk = data["arr_0"]
-            print(f"Загружено из numpy: train={len(train)}, test_val={len(test_val)}, atk={len(atk)}")
+            print(f"Загружено из numpy: train={len(train)}, val={len(val)}, test_val={len(test_val)}, atk={len(atk)}")
             
             # Сохраняем в pickle для резервного копирования
             try:
@@ -279,33 +281,39 @@ def load_data_splits(data_set, train_pct=1.0, ratio=1.0):
             print(f"Ошибка загрузки numpy: {e}")
     
     # Если не удалось загрузить данные, создаем их заново
-    print(f"Создание новых данных...")
+    print(f"Создание новых данных с разделением train/val/test...")
     out_path.parent.mkdir(exist_ok=True, parents=True)
     encoder = Encoder(f"data/{data_set}_encoder.npy")
 
     atk_files, normal_files = load_files(data_set)
 
-    # Определяем размер тренировочного набора
-    train_size = int(len(normal_files) * train_split)
+    # Определяем размеры разделений
+    total_normal = len(normal_files)
+    train_size = int(total_normal * train_split)
+    val_size = int(total_normal * val_split)
     
     # Перемешиваем нормальные данные
     normal_idxs = np.arange(len(normal_files))
     np.random.shuffle(normal_idxs)
     
-    # Разделяем на обучающую и тестовую выборки
+    # Разделяем на обучающую, валидационную и тестовую выборки
     train_files = []
     for idx in normal_idxs[:train_size]:
         train_files.append(normal_files[idx])
         
+    val_files = []
+    for idx in normal_idxs[train_size:train_size + val_size]:
+        val_files.append(normal_files[idx])
+        
     test_val_files = []
-    for idx in normal_idxs[train_size:]:
+    for idx in normal_idxs[train_size + val_size:]:
         test_val_files.append(normal_files[idx])
 
-    print(f"Разделение: train={len(train_files)}, test_val={len(test_val_files)}, atk={len(atk_files)}")
+    print(f"Разделение: train={len(train_files)}, val={len(val_files)}, test_val={len(test_val_files)}, atk={len(atk_files)}")
 
     vec_encode = np.vectorize(encoder.encode)
     train = [vec_encode(row).astype(np.float32) for row in train_files]
-    val = []  # Пустой валидационный набор для совместимости
+    val = [vec_encode(row).astype(np.float32) for row in val_files]
     atk = [vec_encode(row).astype(np.float32) for row in atk_files]
     test_val = [vec_encode(row).astype(np.float32) for row in test_val_files]
 
@@ -326,7 +334,7 @@ def load_data_splits(data_set, train_pct=1.0, ratio=1.0):
     return train, val, test_val, atk
 
 
-def get_data(data_set, batch_size=64, train_pct=1.0, ratio=1.0, num_workers=4):
+def get_data(data_set, batch_size=64, train_pct=1.0, ratio=1.0, num_workers=4, normal_only=False):
     """Lazy-loads data splits for training and evaluation
 
     Converts load_data_splits outputs into ready to go data structures.
@@ -343,13 +351,15 @@ def get_data(data_set, batch_size=64, train_pct=1.0, ratio=1.0, num_workers=4):
         Ratio of baseline to attack sequences in the testing split
     num_workers : int
         Number of worker processes for data loading
+    normal_only : bool
+        If True, use only normal data for training (for autoencoders)
 
     Returns
     -------
         train_loader : DataLoader
             Data loader for training dataset.
         val_loader : DataLoader
-            Empty data loader (для совместимости с существующим кодом).
+            Data loader for validation dataset.
         (test_loader, test_labels): (DataLoader, torch.Tensor)
             Data loader for test dataset and corresponding labels.
 
@@ -361,13 +371,15 @@ def get_data(data_set, batch_size=64, train_pct=1.0, ratio=1.0, num_workers=4):
         data_set, train_pct=train_pct, ratio=ratio
     )
 
+    # Для автоэнкодеров используем только нормальные данные
+    if normal_only:
+        print("🔹 Режим normal_only: используются только нормальные данные для обучения")
+    
     # Создаем датасеты для PyTorch
     train_dataset = SequencePairDataset(train)
+    val_dataset = SequencePairDataset(val) if val else SequencePairDataset([])
     
-    print(f"Создано датасетов: train={len(train_dataset)}")
-    
-    # Используем меньшее количество рабочих процессов для небольших данных
-    actual_workers = min(num_workers, 1) 
+    print(f"Создано датасетов: train={len(train_dataset)}, val={len(val_dataset)}")
     
     # Создаем DataLoaders
     train_loader = DataLoader(
@@ -375,18 +387,18 @@ def get_data(data_set, batch_size=64, train_pct=1.0, ratio=1.0, num_workers=4):
         batch_size=min(batch_size, len(train_dataset)), 
         shuffle=True, 
         collate_fn=collate_fn,
-        num_workers=actual_workers,
-        pin_memory=True
+        num_workers=0,  # Отключаем multiprocessing
+        pin_memory=False
     )
     
-    # Создаем пустой валидационный загрузчик для совместимости
-    empty_dataset = SequencePairDataset([])
+    # Создаем валидационный загрузчик
     val_loader = DataLoader(
-        empty_dataset, 
-        batch_size=1, 
+        val_dataset, 
+        batch_size=min(batch_size, len(val_dataset)) if len(val_dataset) > 0 else 1, 
         shuffle=False, 
         collate_fn=collate_fn,
-        num_workers=1
+        num_workers=0,  # Отключаем multiprocessing
+        pin_memory=False
     )
     
     # Создаем тестовый датасет
@@ -397,8 +409,8 @@ def get_data(data_set, batch_size=64, train_pct=1.0, ratio=1.0, num_workers=4):
         batch_size=min(batch_size, len(test_dataset)), 
         shuffle=False, 
         collate_fn=test_collate_fn,
-        num_workers=actual_workers,
-        pin_memory=True
+        num_workers=0,
+        pin_memory=False
     )
     
     # Создаем метки для тестового набора

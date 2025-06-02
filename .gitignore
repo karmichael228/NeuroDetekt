@@ -1,6 +1,5 @@
 # Директории данных и результатов
 /data/PLAID
-/trials/
 /out/
 
 # Python
@@ -25,6 +24,7 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+*.pth
 
 # Виртуальные окружения
 venv/

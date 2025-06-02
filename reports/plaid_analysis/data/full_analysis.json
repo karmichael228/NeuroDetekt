@@ -1,0 +1,553 @@
+{
+  "basic_stats": {
+    "total_sequences": 39323,
+    "attack_sequences": 1145,
+    "baseline_sequences": 38178,
+    "attack_ratio": 0.02911781908806551,
+    "attack_lengths": {
+      "mean": 321.84978165938867,
+      "median": 61.0,
+      "std": 688.4085185058947,
+      "min": "8",
+      "max": "3845",
+      "q25": 54.0,
+      "q75": 178.0
+    },
+    "baseline_lengths": {
+      "mean": 234.57522657027607,
+      "median": 87.0,
+      "std": 373.0351267437512,
+      "min": "8",
+      "max": "4390",
+      "q25": 62.0,
+      "q75": 292.0
+    },
+    "syscall_stats": {
+      "unique_total": 151,
+      "unique_attack_only": 12,
+      "unique_baseline_only": 32,
+      "unique_shared": 107,
+      "total_attack_calls": 368518,
+      "total_baseline_calls": 8955613
+    }
+  },
+  "syscall_distribution": {
+    "top_attack_calls": [
+      [
+        "read",
+        54343
+      ],
+      [
+        "rt_sigaction",
+        46244
+      ],
+      [
+        "close",
+        26989
+      ],
+      [
+        "fstat",
+        26485
+      ],
+      [
+        "write",
+        18809
+      ],
+      [
+        "openat",
+        17391
+      ],
+      [
+        "stat",
+        17336
+      ],
+      [
+        "mmap",
+        15582
+      ],
+      [
+        "setitimer",
+        11775
+      ],
+      [
+        "mprotect",
+        11327
+      ],
+      [
+        "access",
+        8092
+      ],
+      [
+        "getpid",
+        7949
+      ],
+      [
+        "chdir",
+        7914
+      ],
+      [
+        "times",
+        7882
+      ],
+      [
+        "recvfrom",
+        7816
+      ],
+      [
+        "rt_sigprocmask",
+        5746
+      ],
+      [
+        "select",
+        5474
+      ],
+      [
+        "lstat",
+        4782
+      ],
+      [
+        "prlimit64",
+        4756
+      ],
+      [
+        "ioctl",
+        4249
+      ]
+    ],
+    "top_baseline_calls": [
+      [
+        "rt_sigaction",
+        1432740
+      ],
+      [
+        "close",
+        930527
+      ],
+      [
+        "openat",
+        886886
+      ],
+      [
+        "mmap",
+        824204
+      ],
+      [
+        "read",
+        803661
+      ],
+      [
+        "write",
+        668307
+      ],
+      [
+        "mprotect",
+        512541
+      ],
+      [
+        "fstat",
+        494310
+      ],
+      [
+        "lstat",
+        445370
+      ],
+      [
+        "access",
+        325444
+      ],
+      [
+        "stat",
+        275643
+      ],
+      [
+        "brk",
+        237413
+      ],
+      [
+        "munmap",
+        165603
+      ],
+      [
+        "lseek",
+        140385
+      ],
+      [
+        "dup2",
+        77836
+      ],
+      [
+        "prlimit64",
+        70544
+      ],
+      [
+        "execve",
+        61894
+      ],
+      [
+        "fcntl",
+        43917
+      ],
+      [
+        "rt_sigprocmask",
+        42950
+      ],
+      [
+        "exit_group",
+        37659
+      ]
+    ],
+    "unique_to_attack": [
+      "mount",
+      "inotify_init",
+      "fork",
+      "readv",
+      "umount2",
+      "epoll_pwait",
+      "setpgid",
+      "getdents64",
+      "pselect6",
+      "clock_gettime",
+      "epoll_create1",
+      "readlinkat"
+    ],
+    "unique_to_baseline": [
+      "getxattr",
+      "statx",
+      "getpriority",
+      "getpgid",
+      "lgetxattr",
+      "inotify_init1",
+      "fsetxattr",
+      "splice",
+      "symlinkat",
+      "fchmodat",
+      "mknod",
+      "utimensat",
+      "vfork",
+      "signalfd4",
+      "fdatasync",
+      "creat",
+      "truncate",
+      "getresgid",
+      "lchown",
+      "symlink",
+      "link",
+      "setresuid",
+      "getrusage",
+      "rmdir",
+      "getresuid",
+      "mremap",
+      "utime",
+      "setresgid",
+      "sendmmsg",
+      "setpriority",
+      "getsid",
+      "ftruncate"
+    ],
+    "attack_entropy": 4.710856675003106,
+    "baseline_entropy": 4.106064187820659,
+    "total_unique_calls": 151
+  },
+  "attack_types": {
+    "app_1": {
+      "sequences_count": 13,
+      "avg_length": 514.2307692307693,
+      "total_syscalls": 6685
+    },
+    "app_2": {
+      "sequences_count": 31,
+      "avg_length": 118.12903225806451,
+      "total_syscalls": 3662
+    },
+    "app_3": {
+      "sequences_count": 29,
+      "avg_length": 859.7241379310345,
+      "total_syscalls": 24932
+    },
+    "app_4": {
+      "sequences_count": 13,
+      "avg_length": 413.15384615384613,
+      "total_syscalls": 5371
+    },
+    "app_5": {
+      "sequences_count": 31,
+      "avg_length": 122.80645161290323,
+      "total_syscalls": 3807
+    },
+    "app_6": {
+      "sequences_count": 28,
+      "avg_length": 111.21428571428571,
+      "total_syscalls": 3114
+    },
+    "app_7": {
+      "sequences_count": 4,
+      "avg_length": 52.75,
+      "total_syscalls": 211
+    },
+    "app_8": {
+      "sequences_count": 29,
+      "avg_length": 860.1379310344828,
+      "total_syscalls": 24944
+    },
+    "app_9": {
+      "sequences_count": 4,
+      "avg_length": 470.5,
+      "total_syscalls": 1882
+    },
+    "app_10": {
+      "sequences_count": 4,
+      "avg_length": 52.75,
+      "total_syscalls": 211
+    },
+    "app_11": {
+      "sequences_count": 28,
+      "avg_length": 111.21428571428571,
+      "total_syscalls": 3114
+    },
+    "app_12": {
+      "sequences_count": 4,
+      "avg_length": 83.0,
+      "total_syscalls": 332
+    },
+    "app_13": {
+      "sequences_count": 4,
+      "avg_length": 52.75,
+      "total_syscalls": 211
+    },
+    "app_14": {
+      "sequences_count": 4,
+      "avg_length": 52.75,
+      "total_syscalls": 211
+    },
+    "app_15": {
+      "sequences_count": 31,
+      "avg_length": 114.6774193548387,
+      "total_syscalls": 3555
+    },
+    "app_16": {
+      "sequences_count": 27,
+      "avg_length": 918.5925925925926,
+      "total_syscalls": 24802
+    },
+    "app_17": {
+      "sequences_count": 31,
+      "avg_length": 114.80645161290323,
+      "total_syscalls": 3559
+    },
+    "app_18": {
+      "sequences_count": 72,
+      "avg_length": 407.3333333333333,
+      "total_syscalls": 29328
+    },
+    "app_19": {
+      "sequences_count": 19,
+      "avg_length": 433.2631578947368,
+      "total_syscalls": 8232
+    },
+    "app_20": {
+      "sequences_count": 4,
+      "avg_length": 79.25,
+      "total_syscalls": 317
+    },
+    "app_21": {
+      "sequences_count": 28,
+      "avg_length": 111.21428571428571,
+      "total_syscalls": 3114
+    },
+    "app_22": {
+      "sequences_count": 31,
+      "avg_length": 809.6774193548387,
+      "total_syscalls": 25100
+    },
+    "app_23": {
+      "sequences_count": 4,
+      "avg_length": 52.75,
+      "total_syscalls": 211
+    },
+    "app_24": {
+      "sequences_count": 27,
+      "avg_length": 596.9629629629629,
+      "total_syscalls": 16118
+    },
+    "app_25": {
+      "sequences_count": 4,
+      "avg_length": 89.25,
+      "total_syscalls": 357
+    },
+    "app_26": {
+      "sequences_count": 28,
+      "avg_length": 111.21428571428571,
+      "total_syscalls": 3114
+    },
+    "app_27": {
+      "sequences_count": 31,
+      "avg_length": 114.6774193548387,
+      "total_syscalls": 3555
+    },
+    "app_28": {
+      "sequences_count": 4,
+      "avg_length": 169.25,
+      "total_syscalls": 677
+    },
+    "app_29": {
+      "sequences_count": 13,
+      "avg_length": 510.3076923076923,
+      "total_syscalls": 6634
+    },
+    "app_30": {
+      "sequences_count": 4,
+      "avg_length": 82.0,
+      "total_syscalls": 328
+    },
+    "app_31": {
+      "sequences_count": 28,
+      "avg_length": 111.21428571428571,
+      "total_syscalls": 3114
+    },
+    "app_32": {
+      "sequences_count": 4,
+      "avg_length": 52.75,
+      "total_syscalls": 211
+    },
+    "app_33": {
+      "sequences_count": 35,
+      "avg_length": 346.9714285714286,
+      "total_syscalls": 12144
+    },
+    "app_34": {
+      "sequences_count": 28,
+      "avg_length": 111.28571428571429,
+      "total_syscalls": 3116
+    },
+    "app_35": {
+      "sequences_count": 13,
+      "avg_length": 397.6923076923077,
+      "total_syscalls": 5170
+    },
+    "app_36": {
+      "sequences_count": 4,
+      "avg_length": 52.75,
+      "total_syscalls": 211
+    },
+    "app_37": {
+      "sequences_count": 31,
+      "avg_length": 114.93548387096774,
+      "total_syscalls": 3563
+    },
+    "app_38": {
+      "sequences_count": 28,
+      "avg_length": 111.5,
+      "total_syscalls": 3122
+    },
+    "app_39": {
+      "sequences_count": 28,
+      "avg_length": 888.6428571428571,
+      "total_syscalls": 24882
+    },
+    "app_40": {
+      "sequences_count": 29,
+      "avg_length": 899.5172413793103,
+      "total_syscalls": 26086
+    },
+    "app_41": {
+      "sequences_count": 3,
+      "avg_length": 996.0,
+      "total_syscalls": 2988
+    },
+    "app_42": {
+      "sequences_count": 31,
+      "avg_length": 114.6774193548387,
+      "total_syscalls": 3555
+    },
+    "app_43": {
+      "sequences_count": 4,
+      "avg_length": 187.5,
+      "total_syscalls": 750
+    },
+    "app_44": {
+      "sequences_count": 4,
+      "avg_length": 153.5,
+      "total_syscalls": 614
+    },
+    "app_45": {
+      "sequences_count": 31,
+      "avg_length": 116.7741935483871,
+      "total_syscalls": 3620
+    },
+    "app_46": {
+      "sequences_count": 26,
+      "avg_length": 979.4615384615385,
+      "total_syscalls": 25466
+    },
+    "app_47": {
+      "sequences_count": 31,
+      "avg_length": 114.54838709677419,
+      "total_syscalls": 3551
+    },
+    "app_48": {
+      "sequences_count": 28,
+      "avg_length": 111.21428571428571,
+      "total_syscalls": 3114
+    },
+    "app_49": {
+      "sequences_count": 13,
+      "avg_length": 422.3076923076923,
+      "total_syscalls": 5490
+    },
+    "app_50": {
+      "sequences_count": 4,
+      "avg_length": 52.75,
+      "total_syscalls": 211
+    },
+    "app_51": {
+      "sequences_count": 4,
+      "avg_length": 83.25,
+      "total_syscalls": 333
+    },
+    "app_52": {
+      "sequences_count": 13,
+      "avg_length": 437.7692307692308,
+      "total_syscalls": 5691
+    },
+    "app_53": {
+      "sequences_count": 4,
+      "avg_length": 52.75,
+      "total_syscalls": 211
+    },
+    "app_54": {
+      "sequences_count": 4,
+      "avg_length": 98.25,
+      "total_syscalls": 393
+    },
+    "app_55": {
+      "sequences_count": 31,
+      "avg_length": 117.58064516129032,
+      "total_syscalls": 3645
+    },
+    "app_56": {
+      "sequences_count": 28,
+      "avg_length": 111.21428571428571,
+      "total_syscalls": 3114
+    },
+    "app_57": {
+      "sequences_count": 21,
+      "avg_length": 289.4761904761905,
+      "total_syscalls": 6079
+    },
+    "app_58": {
+      "sequences_count": 21,
+      "avg_length": 339.04761904761904,
+      "total_syscalls": 7120
+    },
+    "app_59": {
+      "sequences_count": 4,
+      "avg_length": 38.0,
+      "total_syscalls": 152
+    },
+    "app_60": {
+      "sequences_count": 28,
+      "avg_length": 111.21428571428571,
+      "total_syscalls": 3114
+    }
+  }
+}
