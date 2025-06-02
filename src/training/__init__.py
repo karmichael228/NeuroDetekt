@@ -6,11 +6,7 @@
 - Специализированные тренеры для разных архитектур
 """
 
-from .trainer import Trainer, LSTMTrainer
 from .autoencoder_trainer import AutoencoderTrainer
+from .trainer import LSTMTrainer, Trainer
 
-__all__ = [
-    'Trainer',
-    'LSTMTrainer', 
-    'AutoencoderTrainer'
-] 
+__all__ = ["Trainer", "LSTMTrainer", "AutoencoderTrainer"]

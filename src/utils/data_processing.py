@@ -3,19 +3,19 @@
 
 """Computes and loads data splits for PLAID
 
-    Provides computing and loading of data splits used in training and evaluation see below for main external use cases.
-    Operates on pre-processed data sets from plaid_preprocessing.py.
-        - get_data : Provides data splits for training and evaluation at the trace level
-        - load_nested_test : Provides test set for evaluation at the application level
+Provides computing and loading of data splits used in training and evaluation see below for main external use cases.
+Operates on pre-processed data sets from plaid_preprocessing.py.
+    - get_data : Provides data splits for training and evaluation at the trace level
+    - load_nested_test : Provides test set for evaluation at the application level
 
 """
 
+import os
+import pickle
+import sys
 from itertools import chain
 from pathlib import Path
 from typing import Hashable, List, Tuple
-import sys
-import os
-import pickle
 
 # Правильный импорт numpy с проверкой
 try:
@@ -25,18 +25,21 @@ except ImportError:
     sys.exit(1)
 
 import torch
-from torch.utils.data import DataLoader, Dataset, TensorDataset, random_split
 from torch.nn.utils.rnn import pad_sequence
+from torch.utils.data import DataLoader, Dataset, TensorDataset, random_split
+
 
 def save_pickle(obj, file_path):
     """Сохраняет объект в формате pickle."""
-    with open(file_path, 'wb') as f:
+    with open(file_path, "wb") as f:
         pickle.dump(obj, f)
+
 
 def load_pickle(file_path):
     """Загружает объект из файла pickle."""
-    with open(file_path, 'rb') as f:
+    with open(file_path, "rb") as f:
         return pickle.load(f)
+
 
 def load_files(data_set, nested=False):
     """Loads requested system call data set from disk
@@ -71,7 +74,7 @@ def load_files(data_set, nested=False):
 
     attack_files = sorted(list(Path("data/PLAID/attack").rglob("*.txt")))
     print(f"Найдено файлов атак: {len(attack_files)}")
-    
+
     baseline_files = list(Path("data/PLAID/baseline").rglob("*.txt"))
     print(f"Найдено базовых файлов: {len(baseline_files)}")
 
@@ -84,10 +87,10 @@ def load_files(data_set, nested=False):
     else:
         attack_sequences = get_seq(attack_files)
     base_sequences = get_seq(baseline_files)
-    
+
     print(f"Распознано последовательностей атак: {len(attack_sequences)}")
     print(f"Распознано базовых последовательностей: {len(base_sequences)}")
-    
+
     return attack_sequences, base_sequences
 
 
@@ -111,7 +114,7 @@ class Encoder:
             except Exception as e:
                 print(f"Ошибка загрузки энкодера: {e}")
                 # Пробуем альтернативный метод с pickle
-                pickle_path = self.file_path.with_suffix('.pkl')
+                pickle_path = self.file_path.with_suffix(".pkl")
                 if pickle_path.exists():
                     self.syscall_map = load_pickle(pickle_path)
                     print(f"Загружен энкодер из pickle с {len(self.syscall_map)} системных вызовов")
@@ -135,12 +138,12 @@ class Encoder:
             return self.syscall_map[syscall]
         syscall_enc = len(self.syscall_map) + 1
         self.syscall_map[syscall] = syscall_enc
-        
+
         try:
             np.save(self.file_path, self.syscall_map)
         except Exception as e:
             print(f"Ошибка сохранения numpy: {e}, используем pickle")
-            pickle_path = self.file_path.with_suffix('.pkl')
+            pickle_path = self.file_path.with_suffix(".pkl")
             save_pickle(self.syscall_map, pickle_path)
 
         return syscall_enc
@@ -148,30 +151,30 @@ class Encoder:
 
 class SequenceDataset(Dataset):
     """PyTorch Dataset для последовательностей системных вызовов"""
-    
+
     def __init__(self, sequences):
         if not sequences:
             print("Внимание: пустой список последовательностей!")
         self.sequences = sequences
-    
+
     def __len__(self):
         return len(self.sequences)
-    
+
     def __getitem__(self, idx):
         return torch.tensor(self.sequences[idx], dtype=torch.long)
 
 
 class SequencePairDataset(Dataset):
     """PyTorch Dataset для пар последовательностей (вход-выход)"""
-    
+
     def __init__(self, sequences):
         if not sequences:
             print("Внимание: пустой список последовательностей!")
         self.sequences = sequences
-    
+
     def __len__(self):
         return len(self.sequences)
-    
+
     def __getitem__(self, idx):
         seq = self.sequences[idx]
         if len(seq) < 2:
@@ -190,11 +193,11 @@ def collate_fn(batch):
     """Функция для батчирования последовательностей разной длины"""
     # Разделяем входные и выходные последовательности
     inputs, targets = zip(*[(x, y) for x, y in batch])
-    
+
     # Паддинг последовательностей
     inputs_padded = pad_sequence(inputs, batch_first=True, padding_value=0)
     targets_padded = pad_sequence(targets, batch_first=True, padding_value=0)
-    
+
     return inputs_padded, targets_padded
 
 
@@ -235,9 +238,9 @@ def load_data_splits(data_set, train_pct=1.0, ratio=1.0):
 
     """
     train_split = 0.6  # 60% нормальных данных для обучения
-    val_split = 0.2    # 20% нормальных данных для валидации  
-    test_split = 0.2   # 20% нормальных данных для тестирования
-    
+    val_split = 0.2  # 20% нормальных данных для валидации
+    test_split = 0.2  # 20% нормальных данных для тестирования
+
     if data_set != "plaid":
         raise ValueError("data_set must be plaid")
 
@@ -249,37 +252,41 @@ def load_data_splits(data_set, train_pct=1.0, ratio=1.0):
         pickle_path = Path(f"out/{data_set}_split60_20_20.pkl")
 
     print(f"Проверка наличия файла {out_path} или {pickle_path}")
-    
+
     # Сначала пробуем загрузить pickle, если он существует
     if pickle_path.exists():
         print(f"Загрузка данных из pickle: {pickle_path}")
         try:
             data = load_pickle(pickle_path)
             train, val, test_val, atk = data
-            print(f"Загружено из pickle: train={len(train)}, val={len(val)}, test_val={len(test_val)}, atk={len(atk)}")
+            print(
+                f"Загружено из pickle: train={len(train)}, val={len(val)}, test_val={len(test_val)}, atk={len(atk)}"
+            )
             return train, val, test_val, atk
         except Exception as e:
             print(f"Ошибка загрузки pickle: {e}")
-    
+
     # Затем пробуем загрузить numpy
     if out_path.exists():
         print(f"Загрузка данных из numpy: {out_path}")
         try:
             data = np.load(out_path, allow_pickle=True)
             train, val, test_val, atk = data["arr_0"]
-            print(f"Загружено из numpy: train={len(train)}, val={len(val)}, test_val={len(test_val)}, atk={len(atk)}")
-            
+            print(
+                f"Загружено из numpy: train={len(train)}, val={len(val)}, test_val={len(test_val)}, atk={len(atk)}"
+            )
+
             # Сохраняем в pickle для резервного копирования
             try:
                 save_pickle([train, val, test_val, atk], pickle_path)
                 print(f"Данные также сохранены в pickle: {pickle_path}")
             except Exception as e:
                 print(f"Ошибка сохранения в pickle: {e}")
-                
+
             return train, val, test_val, atk
         except Exception as e:
             print(f"Ошибка загрузки numpy: {e}")
-    
+
     # Если не удалось загрузить данные, создаем их заново
     print(f"Создание новых данных с разделением train/val/test...")
     out_path.parent.mkdir(exist_ok=True, parents=True)
@@ -291,25 +298,27 @@ def load_data_splits(data_set, train_pct=1.0, ratio=1.0):
     total_normal = len(normal_files)
     train_size = int(total_normal * train_split)
     val_size = int(total_normal * val_split)
-    
+
     # Перемешиваем нормальные данные
     normal_idxs = np.arange(len(normal_files))
     np.random.shuffle(normal_idxs)
-    
+
     # Разделяем на обучающую, валидационную и тестовую выборки
     train_files = []
     for idx in normal_idxs[:train_size]:
         train_files.append(normal_files[idx])
-        
+
     val_files = []
-    for idx in normal_idxs[train_size:train_size + val_size]:
+    for idx in normal_idxs[train_size : train_size + val_size]:
         val_files.append(normal_files[idx])
-        
+
     test_val_files = []
-    for idx in normal_idxs[train_size + val_size:]:
+    for idx in normal_idxs[train_size + val_size :]:
         test_val_files.append(normal_files[idx])
 
-    print(f"Разделение: train={len(train_files)}, val={len(val_files)}, test_val={len(test_val_files)}, atk={len(atk_files)}")
+    print(
+        f"Разделение: train={len(train_files)}, val={len(val_files)}, test_val={len(test_val_files)}, atk={len(atk_files)}"
+    )
 
     vec_encode = np.vectorize(encoder.encode)
     train = [vec_encode(row).astype(np.float32) for row in train_files]
@@ -324,7 +333,7 @@ def load_data_splits(data_set, train_pct=1.0, ratio=1.0):
         np.savez(out_path, data_to_save)
     except Exception as e:
         print(f"Ошибка сохранения в numpy: {e}")
-    
+
     try:
         print(f"Сохранение данных в pickle: {pickle_path}")
         save_pickle([train, val, test_val, atk], pickle_path)
@@ -367,56 +376,54 @@ def get_data(data_set, batch_size=64, train_pct=1.0, ratio=1.0, num_workers=4, n
     if data_set != "plaid":
         raise ValueError("data_set must be plaid")
 
-    train, val, test_val, atk = load_data_splits(
-        data_set, train_pct=train_pct, ratio=ratio
-    )
+    train, val, test_val, atk = load_data_splits(data_set, train_pct=train_pct, ratio=ratio)
 
     # Для автоэнкодеров используем только нормальные данные
     if normal_only:
         print("🔹 Режим normal_only: используются только нормальные данные для обучения")
-    
+
     # Создаем датасеты для PyTorch
     train_dataset = SequencePairDataset(train)
     val_dataset = SequencePairDataset(val) if val else SequencePairDataset([])
-    
+
     print(f"Создано датасетов: train={len(train_dataset)}, val={len(val_dataset)}")
-    
+
     # Создаем DataLoaders
     train_loader = DataLoader(
-        train_dataset, 
-        batch_size=min(batch_size, len(train_dataset)), 
-        shuffle=True, 
+        train_dataset,
+        batch_size=min(batch_size, len(train_dataset)),
+        shuffle=True,
         collate_fn=collate_fn,
         num_workers=0,  # Отключаем multiprocessing
-        pin_memory=False
+        pin_memory=False,
     )
-    
+
     # Создаем валидационный загрузчик
     val_loader = DataLoader(
-        val_dataset, 
-        batch_size=min(batch_size, len(val_dataset)) if len(val_dataset) > 0 else 1, 
-        shuffle=False, 
+        val_dataset,
+        batch_size=min(batch_size, len(val_dataset)) if len(val_dataset) > 0 else 1,
+        shuffle=False,
         collate_fn=collate_fn,
         num_workers=0,  # Отключаем multiprocessing
-        pin_memory=False
+        pin_memory=False,
     )
-    
+
     # Создаем тестовый датасет
     test_sequences = test_val + atk
     test_dataset = SequenceDataset(test_sequences)
     test_loader = DataLoader(
-        test_dataset, 
-        batch_size=min(batch_size, len(test_dataset)), 
-        shuffle=False, 
+        test_dataset,
+        batch_size=min(batch_size, len(test_dataset)),
+        shuffle=False,
         collate_fn=test_collate_fn,
         num_workers=0,
-        pin_memory=False
+        pin_memory=False,
     )
-    
+
     # Создаем метки для тестового набора
     test_labels = torch.zeros(len(test_val) + len(atk))
-    test_labels[len(test_val):] = 1
-    
+    test_labels[len(test_val) :] = 1
+
     return train_loader, val_loader, (test_loader, test_labels)
 
 

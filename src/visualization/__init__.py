@@ -6,10 +6,6 @@
 - Функции для визуализации результатов обучения и тестирования
 """
 
-from .plots import TrainingPlotter, ResultsPlotter, ComparisonPlotter
+from .plots import ComparisonPlotter, ResultsPlotter, TrainingPlotter
 
-__all__ = [
-    'TrainingPlotter',
-    'ResultsPlotter', 
-    'ComparisonPlotter'
-] 
+__all__ = ["TrainingPlotter", "ResultsPlotter", "ComparisonPlotter"]

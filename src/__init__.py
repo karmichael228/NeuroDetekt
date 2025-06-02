@@ -14,4 +14,4 @@ from .main import NeuroDetekt
 __version__ = "1.0.0"
 __author__ = "NeuroDetekt Team"
 
-__all__ = ['NeuroDetekt'] 
+__all__ = ["NeuroDetekt"]

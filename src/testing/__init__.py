@@ -6,10 +6,6 @@
 - Функции для загрузки и тестирования моделей
 """
 
-from .evaluator import Evaluator, LSTMEvaluator, AutoencoderEvaluator
+from .evaluator import AutoencoderEvaluator, Evaluator, LSTMEvaluator
 
-__all__ = [
-    'Evaluator',
-    'LSTMEvaluator',
-    'AutoencoderEvaluator'
-] 
+__all__ = ["Evaluator", "LSTMEvaluator", "AutoencoderEvaluator"]
