@@ -219,9 +219,6 @@ Architecture: Embedding(151→384) → LSTM(384→384, 3layers) → Classifier(3
 - **🔄 Comprehensive analysis** - 4-панельная визуализация
 - **📋 Сравнительные таблицы** с статистической значимостью
 
-### Пример комплексного анализа:
-![Comprehensive Analysis](trials/autoencoder_vs_lstm_comparison/plots/autoencoder_vs_lstm_comparison_comprehensive_analysis.png)
-
 ---
 
 ## 🎓 ОБРАЗОВАТЕЛЬНАЯ ЦЕННОСТЬ
