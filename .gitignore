@@ -2,6 +2,9 @@
 /data/PLAID
 /out/
 
+*.tex
+*.bib
+*.pdf
 # Python
 __pycache__/
 *.py[cod]
